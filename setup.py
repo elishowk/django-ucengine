@@ -1,6 +1,5 @@
 from setuptools import setup, find_packages
-import os, re
-
+import os
 
 CLASSIFIERS = [
     'Environment :: Web Environment',
@@ -26,7 +25,7 @@ setup(
     platforms=['Linux'],
     classifiers=CLASSIFIERS,
     # use pip install -r requirements.txt
-    install_requires = ["Django==1.3.1", "south",'ucengine',],
+    install_requires = ["Django==1.3.1", "south",'http://github.com/CommOnEcoute/py-ucengine/tarball/master#egg=ucengine',],
     dependency_links = ['http://github.com/CommOnEcoute/py-ucengine/tarball/master#egg=ucengine',],
     packages=find_packages(),
     include_package_data=True,
