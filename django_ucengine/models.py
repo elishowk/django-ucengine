@@ -24,3 +24,6 @@ class UCEngineProfile(models.Model):
     
     def get_ucenginepassword(self):
         return self.ucengine_password
+
+    class Meta:
+        db_table = 'ucengine_connect'

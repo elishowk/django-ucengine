@@ -9,7 +9,7 @@ from django.contrib.auth.signals import user_logged_out
 from django.dispatch import receiver
 from ucengine import UCEngine, User as UCUser
 import uuid
-from ucengine_connect import UCEngineProfile
+from django_ucengine import UCEngineProfile
 
 DEFAULT_GROUP = getattr(settings, "DEFAULT_GROUP", "participant")
 
