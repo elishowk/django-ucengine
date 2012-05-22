@@ -25,7 +25,7 @@ setup(
     platforms=['Linux'],
     classifiers=CLASSIFIERS,
     # use pip install -r requirements.txt
-    install_requires = ["Django==1.3.1", "south",'http://github.com/CommOnEcoute/py-ucengine/tarball/master#egg=ucengine',],
+    install_requires = ["Django==1.3.1", "south",],
     dependency_links = ['http://github.com/CommOnEcoute/py-ucengine/tarball/master#egg=ucengine',],
     packages=find_packages(),
     include_package_data=True,
