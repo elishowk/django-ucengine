@@ -42,6 +42,7 @@ def get_profile_model():
         return UCEngineProfile
     return profile_mod
 
+
 def _gen_password():
     """
     Auto generated passwords for UCEngine users
@@ -56,15 +57,11 @@ def _get_or_create_profile(instance, created=False):
     """
     profile_model = get_profile_model()
     try:
-        new_profile = instance.get_profile()
-    except profile_model.DoesNotExist:
+        return instance.get_profile()
+    except profile_model.DoesNotExist, exc:
         new_profile = profile_model(user=instance)
         new_profile.save()
-    try:
-        return instance.get_profile()
-    except SiteProfileNotAvailable, profexc:
-        logging.error("%s"%profexc)
-
+        return new_profile
 
 def _add_default_group(instance):
     """
@@ -79,7 +76,7 @@ def _add_default_group(instance):
             return
 
 
-def _sync_user_credentials(rootsession, djangouser, sync=True):
+def _sync_user_credentials(rootsession, djangouser, sync=True, created=False):
     """
     finds or creates the ucengine user with a fresh credentials
     """
@@ -91,7 +88,7 @@ def _sync_user_credentials(rootsession, djangouser, sync=True):
     ucengineuser = UCUser(djangouser.username, uid=uid, credential=_gen_password(), auth="password")
     # writes the new credentials to the django user
     if sync is True:
-        profile = _get_or_create_profile(djangouser)
+        profile = _get_or_create_profile(djangouser, created)
         profile.save_ucengine_user(uid, ucengineuser.credential)
         profile.save()
     try:
@@ -113,7 +110,7 @@ def _email_to_md5(ucengineuser):
     else:
         ucengineuser.metadata['md5'] = ""
 
-def _copy_metadata(rootsession, djangouser):
+def _copy_metadata(rootsession, djangouser, created=False):
     """
     Copies django user's profile to ucengine user's metadata
     """
@@ -127,7 +124,7 @@ def _copy_metadata(rootsession, djangouser):
         ucengineuser = UCUser(djangouser.username)
     try:
         ucengineuser.metadata.update(djangouser.__dict__)
-        profile = _get_or_create_profile(djangouser)
+        profile = _get_or_create_profile(djangouser, created)
         ucengineuser.credential = profile.get_ucenginepassword()
         ucengineuser.metadata.update(profile.__dict__)
         groups = ["%s"%group for group in djangouser.groups.all()]
@@ -159,12 +156,15 @@ def post_save_user(sender, instance, created=None, **kwargs):
     """
     rootsession = UCEngine(UCENGINE['host'], UCENGINE['port'])\
             .connect(UCUser(UCENGINE['user']), credential=UCENGINE['pwd'])
-    _sync_user_credentials(rootsession, instance, sync=True)
-    ucengineuser = _copy_metadata(rootsession, instance)
+    _sync_user_credentials(rootsession, instance, sync=True, created=created)
+    ucengineuser = _copy_metadata(rootsession, instance, created=created)
     rootsession.add_user_role(ucengineuser.uid, DEFAULT_GROUP, '')
 
 @receiver(m2m_changed, sender=DjangoUser.groups.through)
 def post_changed_groups(sender, instance, action, **kwargs):
+    """
+    Updated UCengine roles depending on Django's groups
+    """
     rootsession = UCEngine(UCENGINE['host'], UCENGINE['port'])\
             .connect(UCUser(UCENGINE['user']), credential=UCENGINE['pwd'])
     if action == "pre_clear" or action == "pre_remove":
@@ -219,7 +219,7 @@ def createUCEngineSession(sender, **kwargs):
             UCENGINE['port'])\
             .connect(UCUser(UCENGINE['user']),\
             credential=UCENGINE['pwd'])
-        _sync_user_credentials(rootsession, djangouser, sync=True)
+        _sync_user_credentials(rootsession, djangouser, sync=True, created=False)
         _copy_metadata(rootsession, djangouser)
         rootsession.close()
 
@@ -238,5 +238,5 @@ def destroyUCEngineSession(sender, **kwargs):
             UCENGINE['port'])\
             .connect(UCUser(UCENGINE['user']),\
             credential=UCENGINE['pwd'])
-        _sync_user_credentials(rootsession, djangouser, sync=False)
+        _sync_user_credentials(rootsession, djangouser, sync=False, created=False)
         rootsession.close()

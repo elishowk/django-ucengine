@@ -30,4 +30,4 @@ class UCEngineProfile(UCEngineCredentials):
     """
     Default User profile
     """
-    user = models.OneToOneField(User, verbose_name='Attached User', related_name='ucengine_connect_profile')
+    user = models.OneToOneField(User, verbose_name='Attached User', related_name='ucengine_profile')
