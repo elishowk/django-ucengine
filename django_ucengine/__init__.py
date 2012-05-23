@@ -143,7 +143,6 @@ def _copy_metadata(rootsession, djangouser, created=False, ucengineuser=None):
             groups += [DEFAULT_GROUP]
         ucengineuser.metadata['groups'] = ",".join(groups)
         ucengineuser = _obfuscate_user(ucengineuser)
-        ucengineuser = _email_to_md5(ucengineuser)
     except Exception, exc:
         logging.error("errror copying user %s metadata %s"%(djangouser.username,exc))
         pass
@@ -152,7 +151,6 @@ def _copy_metadata(rootsession, djangouser, created=False, ucengineuser=None):
         rootsession.save(ucengineuser)
     except Exception, err:
         logging.error("error saving UCUser : %s"%err)
-    _logger.warn( ucengineuser.metadata )
     return ucengineuser
 
 
