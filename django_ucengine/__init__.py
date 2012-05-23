@@ -18,9 +18,8 @@ UCENGINE = getattr(settings, "UCENGINE",\
         {'host': 'http://localhost', 'port':8000,\
         'user': 'djangobrick', 'pwd': ''})
 
-from django.contrib.auth.models import SiteProfileNotAvailable
-
 import logging
+_logger = logging.getLogger('coecms.Logger')
 
 
 def get_profile_model():
@@ -63,6 +62,7 @@ def _get_or_create_profile(instance, created=False):
         new_profile.save()
         return new_profile
 
+
 def _add_default_group(instance):
     """
     Adds DEFAULT_GROUP to User's Group
@@ -75,44 +75,9 @@ def _add_default_group(instance):
             logging.error(exc)
             return
 
-
-def _sync_user_credentials(rootsession, djangouser, sync=True, created=False):
+def find_user_by_name(rootsession, djangouser):
     """
-    finds or creates the ucengine user with a fresh credentials
-    """
-    status, result = rootsession.find_user_by_name(djangouser.username)
-    if status == 200:
-        uid = result['result']['uid']
-    else:
-        uid=None
-    ucengineuser = UCUser(djangouser.username, uid=uid, credential=_gen_password(), auth="password")
-    # writes the new credentials to the django user
-    if sync is True:
-        profile = _get_or_create_profile(djangouser, created)
-        profile.save_ucengine_user(uid, ucengineuser.credential)
-        profile.save()
-    try:
-        rootsession.save(ucengineuser)
-    except Exception, exc:
-        logging.error("unable to save UCEngine user : %s"%exc)
-    return ucengineuser
-
-def _email_to_md5(ucengineuser):
-    """
-    Obfuscates emails with md5 hashes
-    """
-    if 'email' in ucengineuser.metadata:
-        md5hash = md5.new()
-        cleandemail = ucengineuser.metadata['email'].strip()
-        md5hash.update(cleandemail.lower())
-        ucengineuser.metadata['md5'] = md5hash.hexdigest()
-        del ucengineuser.metadata['email']
-    else:
-        ucengineuser.metadata['md5'] = ""
-
-def _copy_metadata(rootsession, djangouser, created=False):
-    """
-    Copies django user's profile to ucengine user's metadata
+    Common method fetching a UCE User instance
     """
     status, result = rootsession.find_user_by_name(djangouser.username)
     if status == 200:
@@ -121,7 +86,53 @@ def _copy_metadata(rootsession, djangouser, created=False):
             metadata=result['result']['metadata'],
             auth=result['result']['auth'])
     else:
-        ucengineuser = UCUser(djangouser.username)
+        ucengineuser = UCUser(djangouser.username, auth="password")
+    return ucengineuser
+
+
+def _sync_user_credentials(rootsession, djangouser, sync=True, created=False, ucengineuser=None):
+    """
+    finds or creates the ucengine user with a fresh credentials
+    """
+    if ucengineuser is None:
+        ucengineuser = find_user_by_name(rootsession, djangouser)
+        ucengineuser.credential= _gen_password()
+    # writes the new credentials to the django user
+    if sync is True:
+        profile = _get_or_create_profile(djangouser, created)
+        profile.save_ucengine_user(ucengineuser.uid, ucengineuser.credential)
+        profile.save()
+    _copy_metadata(rootsession, djangouser, created=False, ucengineuser=ucengineuser)
+    return ucengineuser
+
+def _obfuscate_user(ucengineuser):
+    """
+    Cleans User data
+    """
+    if 'password' in ucengineuser.metadata:
+        del ucengineuser.metadata['password']
+    if '_state' in ucengineuser.metadata:
+        del ucengineuser.metadata['_state']
+    if '_user_cache' in ucengineuser.metadata:
+        del ucengineuser.metadata['_user_cache']
+    if '_profile_cache' in ucengineuser.metadata:
+        del ucengineuser.metadata['_profile_cache']
+    if 'email' in ucengineuser.metadata:
+        md5hash = md5()
+        cleandemail = ucengineuser.metadata['email'].strip()
+        md5hash.update(cleandemail.lower())
+        ucengineuser.metadata['md5'] = md5hash.hexdigest()
+        del ucengineuser.metadata['email']
+    else:
+        ucengineuser.metadata['md5'] = ""
+    return ucengineuser
+
+def _copy_metadata(rootsession, djangouser, created=False, ucengineuser=None):
+    """
+    Copies django user's profile to ucengine user's metadata
+    """
+    if ucengineuser is None:
+        ucengineuser = find_user_by_name(rootsession, djangouser)
     try:
         ucengineuser.metadata.update(djangouser.__dict__)
         profile = _get_or_create_profile(djangouser, created)
@@ -131,12 +142,8 @@ def _copy_metadata(rootsession, djangouser, created=False):
         if DEFAULT_GROUP not in groups:
             groups += [DEFAULT_GROUP]
         ucengineuser.metadata['groups'] = ",".join(groups)
-        if '_state' in ucengineuser.metadata:
-            del ucengineuser.metadata['_state']
-        if '_user_cache' in ucengineuser.metadata:
-            del ucengineuser.metadata['_user_cache']
-        if '_profile_cache' in ucengineuser.metadata:
-            del ucengineuser.metadata['_profile_cache']
+        ucengineuser = _obfuscate_user(ucengineuser)
+        ucengineuser = _email_to_md5(ucengineuser)
     except Exception, exc:
         logging.error("errror copying user %s metadata %s"%(djangouser.username,exc))
         pass
@@ -145,10 +152,11 @@ def _copy_metadata(rootsession, djangouser, created=False):
         rootsession.save(ucengineuser)
     except Exception, err:
         logging.error("error saving UCUser : %s"%err)
+    _logger.warn( ucengineuser.metadata )
     return ucengineuser
 
 
-@receiver(post_save, sender=DjangoUser, dispatch_uid="ucengine_connect.__init__")
+@receiver(post_save, sender=DjangoUser, dispatch_uid="django_ucengine.__init__")
 def post_save_user(sender, instance, created=None, **kwargs):
     """
     updates User's profile after every save operation
@@ -156,11 +164,10 @@ def post_save_user(sender, instance, created=None, **kwargs):
     """
     rootsession = UCEngine(UCENGINE['host'], UCENGINE['port'])\
             .connect(UCUser(UCENGINE['user']), credential=UCENGINE['pwd'])
-    _sync_user_credentials(rootsession, instance, sync=True, created=created)
-    ucengineuser = _copy_metadata(rootsession, instance, created=created)
+    ucengineuser = _sync_user_credentials(rootsession, instance, sync=True, created=created)
     rootsession.add_user_role(ucengineuser.uid, DEFAULT_GROUP, '')
 
-@receiver(m2m_changed, sender=DjangoUser.groups.through)
+@receiver(m2m_changed, sender=DjangoUser.groups.through, dispatch_uid="django_ucengine.__init__.post_changed_groups")
 def post_changed_groups(sender, instance, action, **kwargs):
     """
     Updated UCengine roles depending on Django's groups
@@ -173,37 +180,33 @@ def post_changed_groups(sender, instance, action, **kwargs):
         _add_ucengine_roles(rootsession, instance)
     rootsession.close()
 
-def _delete_ucengine_roles(rootsession, instance):
+def _delete_ucengine_roles(rootsession, instance, ucengineuser=None):
     """ delete all django groups to uce user roles """
-    status, result = rootsession.find_user_by_name(instance.username)
-    if status == 200:
-        uid=result['result']['uid']
-        for grp in instance.groups.all():
-            groupname = "%s"%grp
-            try:
-                rootsession.delete_user_role(uid, groupname, "")
-            except Exception, exc:
-                logging.error("ucengine_connect._delete_ucengine_roles() failed %s"%exc)
-        _copy_metadata(rootsession, instance)
-    else:
-        logging.warning("Could not delete uce roles on unexistent user")
+    if ucengineuser is None:
+        ucengineuser = find_user_by_name(rootsession, instance)
+    uid=ucengineuser.uid
+    for grp in instance.groups.all():
+        groupname = "%s"%grp
+        try:
+            rootsession.delete_user_role(uid, groupname, "")
+        except Exception, exc:
+            logging.error("_delete_ucengine_roles() failed %s"%exc)
+    _copy_metadata(rootsession, instance, ucengineuser=ucengineuser)
 
-def _add_ucengine_roles(rootsession, instance):
+def _add_ucengine_roles(rootsession, instance, ucengineuser=None):
     """ add all django groups to uce user roles """
-    status, result = rootsession.find_user_by_name(instance.username)
-    if status == 200:
-        uid=result['result']['uid']
-        for grp in instance.groups.all():
-            groupname = "%s"%grp
-            try:
-                rootsession.add_user_role(uid, groupname, "")
-            except Exception, exc:
-                logging.error("ucengine_connect._add_ucengine_roles() failed %s"%exc)
-        _copy_metadata(rootsession, instance)
-    else:
-        logging.warning("Could not add uce roles on unexistent user")
+    if ucengineuser is None:
+        ucengineuser = find_user_by_name(rootsession, instance)
+    uid=ucengineuser.uid
+    for grp in instance.groups.all():
+        groupname = "%s"%grp
+        try:
+            rootsession.add_user_role(uid, groupname, "")
+        except Exception, exc:
+            logging.error("_add_ucengine_roles() failed %s"%exc)
+    _copy_metadata(rootsession, instance, ucengineuser=ucengineuser)
 
-@receiver(user_logged_in)
+@receiver(user_logged_in, dispatch_uid="django_ucengine.__init__.createUCEngineSession")
 def createUCEngineSession(sender, **kwargs):
     """
     override the user's UCEngine's password
@@ -220,10 +223,9 @@ def createUCEngineSession(sender, **kwargs):
             .connect(UCUser(UCENGINE['user']),\
             credential=UCENGINE['pwd'])
         _sync_user_credentials(rootsession, djangouser, sync=True, created=False)
-        _copy_metadata(rootsession, djangouser)
         rootsession.close()
 
-@receiver(user_logged_out)
+@receiver(user_logged_out, dispatch_uid="django_ucengine.__init__.destroyUCEngineSession")
 def destroyUCEngineSession(sender, **kwargs):
     """
     override the user's UCEngine's password
