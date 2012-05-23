@@ -2,12 +2,12 @@
 from django.db import models
 from django.contrib.auth.models import User
 
-class UCEngineProfile(models.Model):
+
+class UCEngineCredentials(models.Model):
     """
-    Extendyour  custom User profile with this class
+    Extend your custom User profile with this class
     to integrate UCEngine API credentials to your Users' DB
     """
-    user = models.OneToOneField(User, verbose_name='Attached User', related_name='ucengine_connect_profile')
     ucengine_uid = models.CharField(max_length=64, default="", null=True, blank="", editable=False)
     ucengine_password = models.CharField(max_length=64, default="", editable=False)
 
@@ -25,5 +25,9 @@ class UCEngineProfile(models.Model):
     def get_ucenginepassword(self):
         return self.ucengine_password
 
-    class Meta:
-        db_table = 'ucengine_connect'
+
+class UCEngineProfile(UCEngineCredentials):
+    """
+    Default User profile
+    """
+    user = models.OneToOneField(User, verbose_name='Attached User', related_name='ucengine_connect_profile')
