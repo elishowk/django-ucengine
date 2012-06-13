@@ -163,7 +163,6 @@ def post_save_user(sender, instance, created=None, **kwargs):
     rootsession = UCEngine(UCENGINE['host'], UCENGINE['port'])\
             .connect(UCUser(UCENGINE['user']), credential=UCENGINE['pwd'])
     ucengineuser = _sync_user_credentials(rootsession, instance, sync=True, created=created)
-    rootsession.add_user_role(ucengineuser.uid, DEFAULT_GROUP, '')
 
 @receiver(m2m_changed, sender=DjangoUser.groups.through, dispatch_uid="django_ucengine.__init__.post_changed_groups")
 def post_changed_groups(sender, instance, action, **kwargs):
@@ -183,6 +182,7 @@ def _delete_ucengine_roles(rootsession, instance, ucengineuser=None):
     if ucengineuser is None:
         ucengineuser = find_user_by_name(rootsession, instance)
     uid=ucengineuser.uid
+    _add_default_group(instance)
     for grp in instance.groups.all():
         groupname = "%s"%grp
         try:
@@ -196,6 +196,7 @@ def _add_ucengine_roles(rootsession, instance, ucengineuser=None):
     if ucengineuser is None:
         ucengineuser = find_user_by_name(rootsession, instance)
     uid=ucengineuser.uid
+    _add_default_group(instance)
     for grp in instance.groups.all():
         groupname = "%s"%grp
         try:
