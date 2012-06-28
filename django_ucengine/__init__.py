@@ -19,8 +19,6 @@ UCENGINE = getattr(settings, "UCENGINE",\
         'user': 'djangobrick', 'pwd': ''})
 
 import logging
-_logger = logging.getLogger('coecms.Logger')
-
 
 def get_profile_model():
     """
@@ -178,7 +176,9 @@ def post_changed_groups(sender, instance, action, **kwargs):
     rootsession.close()
 
 def _delete_ucengine_roles(rootsession, instance, ucengineuser=None):
-    """ delete all django groups to uce user roles """
+    """
+    delete all django groups to uce user roles
+    """
     if ucengineuser is None:
         ucengineuser = find_user_by_name(rootsession, instance)
     uid=ucengineuser.uid
@@ -192,7 +192,9 @@ def _delete_ucengine_roles(rootsession, instance, ucengineuser=None):
     _copy_metadata(rootsession, instance, ucengineuser=ucengineuser)
 
 def _add_ucengine_roles(rootsession, instance, ucengineuser=None):
-    """ add all django groups to uce user roles """
+    """
+    adds all django groups to uce user roles
+    """
     if ucengineuser is None:
         ucengineuser = find_user_by_name(rootsession, instance)
     uid=ucengineuser.uid
@@ -206,7 +208,7 @@ def _add_ucengine_roles(rootsession, instance, ucengineuser=None):
     _copy_metadata(rootsession, instance, ucengineuser=ucengineuser)
 
 @receiver(user_logged_in, dispatch_uid="django_ucengine.__init__.createUCEngineSession")
-def createUCEngineSession(sender, **kwargs):
+def update_ucengine_credentials(sender, **kwargs):
     """
     override the user's UCEngine's password
     uses a random/unique password
@@ -225,7 +227,7 @@ def createUCEngineSession(sender, **kwargs):
         rootsession.close()
 
 @receiver(user_logged_out, dispatch_uid="django_ucengine.__init__.destroyUCEngineSession")
-def destroyUCEngineSession(sender, **kwargs):
+def overwrite_ucengine_credentials(sender, **kwargs):
     """
     override the user's UCEngine's password
     uses a random/unique password different from the one already in the profile
