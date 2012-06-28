@@ -177,7 +177,9 @@ def post_changed_groups(sender, instance, action, **kwargs):
     rootsession.close()
 
 def _delete_ucengine_roles(rootsession, instance, ucengineuser=None):
-    """ delete all django groups to uce user roles """
+    """
+    delete all django groups to uce user roles
+    """
     if ucengineuser is None:
         ucengineuser = find_user_by_name(rootsession, instance)
     uid=ucengineuser.uid
@@ -191,7 +193,9 @@ def _delete_ucengine_roles(rootsession, instance, ucengineuser=None):
     _copy_metadata(rootsession, instance, ucengineuser=ucengineuser)
 
 def _add_ucengine_roles(rootsession, instance, ucengineuser=None):
-    """ add all django groups to uce user roles """
+    """
+    adds all django groups to uce user roles
+    """
     if ucengineuser is None:
         ucengineuser = find_user_by_name(rootsession, instance)
     uid=ucengineuser.uid
