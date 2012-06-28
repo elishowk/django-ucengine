@@ -132,6 +132,8 @@ def _copy_metadata(rootsession, djangouser, created=False, ucengineuser=None):
     if ucengineuser is None:
         ucengineuser = find_user_by_name(rootsession, djangouser)
     try:
+        if ucengineuser.metadata is None:
+            ucengineuser.metadata = {}
         ucengineuser.metadata.update(djangouser.__dict__)
         profile = _get_or_create_profile(djangouser, created)
         ucengineuser.credential = profile.get_ucenginepassword()
@@ -142,7 +144,7 @@ def _copy_metadata(rootsession, djangouser, created=False, ucengineuser=None):
         ucengineuser.metadata['groups'] = ",".join(groups)
         ucengineuser = _obfuscate_user(ucengineuser)
     except Exception, exc:
-        logging.error("errror copying user %s metadata %s"%(djangouser.username,exc))
+        logging.error("error copying user %s metadata %s"%(djangouser.username,exc))
         pass
     # writes the updated UCUser to UCEngine database
     try:
