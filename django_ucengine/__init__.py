@@ -62,7 +62,7 @@ def _get_or_create_profile(instance, created=False):
         return new_profile
 
 
-def _add_default_group(instance, uid, rootsession)
+def _add_default_group(instance, uid, rootsession):
     """
     Adds DEFAULT_GROUP to User's Group
     """
@@ -74,6 +74,7 @@ def _add_default_group(instance, uid, rootsession)
             logging.error(exc)
         try:
             rootsession.add_user_role(uid, DEFAULT_GROUP, "")
+            logging.warn("added default role to %s"%uid)
         except Exception, excrole:
             logging.error("%s"%excrole)
 
