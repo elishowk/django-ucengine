@@ -19,7 +19,6 @@ UCENGINE = getattr(settings, "UCENGINE",\
         'user': 'djangobrick', 'pwd': ''})
 
 import logging
-_logger = logging.getLogger('coecms.Logger')
 
 
 def get_profile_model():
@@ -63,7 +62,7 @@ def _get_or_create_profile(instance, created=False):
         return new_profile
 
 
-def _add_default_group(instance):
+def _add_default_group(instance, uid, rootsession)
     """
     Adds DEFAULT_GROUP to User's Group
     """
@@ -73,7 +72,10 @@ def _add_default_group(instance):
             instance.groups.add(default_group_instance)
         except Exception, exc:
             logging.error(exc)
-            return
+        try:
+            rootsession.add_user_role(uid, DEFAULT_GROUP, "")
+        except Exception, excrole:
+            logging.error("%s"%excrole)
 
 def find_user_by_name(rootsession, djangouser):
     """
@@ -97,11 +99,12 @@ def _sync_user_credentials(rootsession, djangouser, sync=True, created=False, uc
     if ucengineuser is None:
         ucengineuser = find_user_by_name(rootsession, djangouser)
         ucengineuser.credential= _gen_password()
-    # writes the new credentials to the django user
+    # writes the new credentials to the django user's profile
     if sync is True:
         profile = _get_or_create_profile(djangouser, created)
         profile.save_ucengine_user(ucengineuser.uid, ucengineuser.credential)
         profile.save()
+    _add_default_group(djangouser, ucengineuser.uid, rootsession)
     _copy_metadata(rootsession, djangouser, created=False, ucengineuser=ucengineuser)
     return ucengineuser
 
@@ -182,13 +185,13 @@ def _delete_ucengine_roles(rootsession, instance, ucengineuser=None):
     if ucengineuser is None:
         ucengineuser = find_user_by_name(rootsession, instance)
     uid=ucengineuser.uid
-    _add_default_group(instance)
     for grp in instance.groups.all():
         groupname = "%s"%grp
         try:
             rootsession.delete_user_role(uid, groupname, "")
         except Exception, exc:
             logging.error("_delete_ucengine_roles() failed %s"%exc)
+    _add_default_group(instance, uid, rootsession)
     _copy_metadata(rootsession, instance, ucengineuser=ucengineuser)
 
 def _add_ucengine_roles(rootsession, instance, ucengineuser=None):
@@ -196,17 +199,17 @@ def _add_ucengine_roles(rootsession, instance, ucengineuser=None):
     if ucengineuser is None:
         ucengineuser = find_user_by_name(rootsession, instance)
     uid=ucengineuser.uid
-    _add_default_group(instance)
     for grp in instance.groups.all():
         groupname = "%s"%grp
         try:
             rootsession.add_user_role(uid, groupname, "")
         except Exception, exc:
             logging.error("_add_ucengine_roles() failed %s"%exc)
+    _add_default_group(instance, uid, rootsession)
     _copy_metadata(rootsession, instance, ucengineuser=ucengineuser)
 
-@receiver(user_logged_in, dispatch_uid="django_ucengine.__init__.createUCEngineSession")
-def createUCEngineSession(sender, **kwargs):
+@receiver(user_logged_in, dispatch_uid="django_ucengine.__init__.update_ucengine_credentials")
+def update_ucengine_credentials(sender, **kwargs):
     """
     override the user's UCEngine's password
     uses a random/unique password
@@ -224,8 +227,8 @@ def createUCEngineSession(sender, **kwargs):
         _sync_user_credentials(rootsession, djangouser, sync=True, created=False)
         rootsession.close()
 
-@receiver(user_logged_out, dispatch_uid="django_ucengine.__init__.destroyUCEngineSession")
-def destroyUCEngineSession(sender, **kwargs):
+@receiver(user_logged_out, dispatch_uid="django_ucengine.__init__.overwrite_ucengine_credentials")
+def overwrite_ucengine_credentials(sender, **kwargs):
     """
     override the user's UCEngine's password
     uses a random/unique password different from the one already in the profile
