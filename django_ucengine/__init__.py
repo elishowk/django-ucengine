@@ -93,7 +93,7 @@ def find_user_by_name(rootsession, djangouser):
     return ucengineuser
 
 
-def _sync_user_credentials(rootsession, djangouser, sync=True, created=False, ucengineuser=None):
+def _save_django_user(rootsession, djangouser, sync=True, created=False, ucengineuser=None):
     """
     finds or creates the ucengine user with a fresh credentials
     """
@@ -106,7 +106,7 @@ def _sync_user_credentials(rootsession, djangouser, sync=True, created=False, uc
         profile.save_ucengine_user(ucengineuser.uid, ucengineuser.credential)
         profile.save()
     _add_default_group(djangouser, ucengineuser.uid, rootsession)
-    _copy_metadata(rootsession, djangouser, created=False, ucengineuser=ucengineuser)
+    _save_ucengine_user(rootsession, djangouser, created=False, ucengineuser=ucengineuser)
     return ucengineuser
 
 def _obfuscate_user(ucengineuser):
@@ -131,7 +131,7 @@ def _obfuscate_user(ucengineuser):
         ucengineuser.metadata['md5'] = ""
     return ucengineuser
 
-def _copy_metadata(rootsession, djangouser, created=False, ucengineuser=None):
+def _save_ucengine_user(rootsession, djangouser, created=False, ucengineuser=None):
     """
     Copies django user's profile to ucengine user's metadata
     """
@@ -166,7 +166,7 @@ def post_save_user(sender, instance, created=None, **kwargs):
     """
     rootsession = UCEngine(UCENGINE['host'], UCENGINE['port'])\
             .connect(UCUser(UCENGINE['user']), credential=UCENGINE['pwd'])
-    ucengineuser = _sync_user_credentials(rootsession, instance, sync=True, created=created)
+    ucengineuser = _save_django_user(rootsession, instance, sync=True, created=created)
 
 @receiver(m2m_changed, sender=DjangoUser.groups.through, dispatch_uid="django_ucengine.__init__.post_changed_groups")
 def post_changed_groups(sender, instance, action, **kwargs):
@@ -193,7 +193,7 @@ def _delete_ucengine_roles(rootsession, instance, ucengineuser=None):
         except Exception, exc:
             logging.error("_delete_ucengine_roles() failed %s"%exc)
     _add_default_group(instance, uid, rootsession)
-    _copy_metadata(rootsession, instance, ucengineuser=ucengineuser)
+    _save_ucengine_user(rootsession, instance, ucengineuser=ucengineuser)
 
 def _add_ucengine_roles(rootsession, instance, ucengineuser=None):
     """ add all django groups to uce user roles """
@@ -207,7 +207,7 @@ def _add_ucengine_roles(rootsession, instance, ucengineuser=None):
         except Exception, exc:
             logging.error("_add_ucengine_roles() failed %s"%exc)
     _add_default_group(instance, uid, rootsession)
-    _copy_metadata(rootsession, instance, ucengineuser=ucengineuser)
+    _save_ucengine_user(rootsession, instance, ucengineuser=ucengineuser)
 
 @receiver(user_logged_in, dispatch_uid="django_ucengine.__init__.update_ucengine_credentials")
 def update_ucengine_credentials(sender, **kwargs):
@@ -225,7 +225,7 @@ def update_ucengine_credentials(sender, **kwargs):
             UCENGINE['port'])\
             .connect(UCUser(UCENGINE['user']),\
             credential=UCENGINE['pwd'])
-        _sync_user_credentials(rootsession, djangouser, sync=True, created=False)
+        _save_django_user(rootsession, djangouser, sync=True, created=False)
         rootsession.close()
 
 @receiver(user_logged_out, dispatch_uid="django_ucengine.__init__.overwrite_ucengine_credentials")
@@ -243,5 +243,5 @@ def overwrite_ucengine_credentials(sender, **kwargs):
             UCENGINE['port'])\
             .connect(UCUser(UCENGINE['user']),\
             credential=UCENGINE['pwd'])
-        _sync_user_credentials(rootsession, djangouser, sync=False, created=False)
+        _save_django_user(rootsession, djangouser, sync=False, created=False)
         rootsession.close()
