@@ -189,7 +189,6 @@ def _delete_ucengine_roles(rootsession, instance, ucengineuser=None):
     if ucengineuser is None:
         ucengineuser = find_user_by_name(rootsession, instance)
     uid=ucengineuser.uid
-    _add_default_group(instance)
     for grp in instance.groups.all():
         groupname = "%s"%grp
         try:
@@ -206,14 +205,13 @@ def _add_ucengine_roles(rootsession, instance, ucengineuser=None):
     if ucengineuser is None:
         ucengineuser = find_user_by_name(rootsession, instance)
     uid=ucengineuser.uid
-    _add_default_group(instance)
+    _add_default_group(instance, uid, rootsession)
     for grp in instance.groups.all():
         groupname = "%s"%grp
         try:
             rootsession.add_user_role(uid, groupname, "")
         except Exception, exc:
             logging.error("_add_ucengine_roles() failed %s"%exc)
-    _add_default_group(instance, uid, rootsession)
     _save_ucengine_user(rootsession, instance, ucengineuser=ucengineuser)
 
 @receiver(user_logged_in, dispatch_uid="django_ucengine.__init__.update_ucengine_credentials")
