@@ -61,21 +61,15 @@ def _get_or_create_profile(instance, created=False):
         return new_profile
 
 
-def _add_default_group(instance, uid, rootsession):
+def _add_default_role(uid, rootsession):
     """
-    Adds DEFAULT_GROUP to User's Group
+    Adds DEFAULT_GROUP to UCEngine User's role
+    DEFAULT_GROUP would be default logged-in user permissions on UCEngine
     """
-    if not instance.groups.filter(name__exact=DEFAULT_GROUP):
-        try:
-            default_group_instance = Group.objects.get(name=DEFAULT_GROUP)
-            instance.groups.add(default_group_instance)
-        except Exception, exc:
-            logging.error(exc)
-        try:
-            rootsession.add_user_role(uid, DEFAULT_GROUP, "")
-            logging.warn("added default role to %s"%uid)
-        except Exception, excrole:
-            logging.error("%s"%excrole)
+    try:
+        rootsession.add_user_role(uid, DEFAULT_GROUP, "")
+    except Exception, excrole:
+        logging.error("%s"%excrole)
 
 def find_user_by_name(rootsession, djangouser):
     """
@@ -104,7 +98,6 @@ def _save_django_user(rootsession, djangouser, sync=True, created=False, ucengin
         profile = _get_or_create_profile(djangouser, created)
         profile.save_ucengine_user(ucengineuser.uid, ucengineuser.credential)
         profile.save()
-    _add_default_group(djangouser, ucengineuser.uid, rootsession)
     _save_ucengine_user(rootsession, djangouser, created=False, ucengineuser=ucengineuser)
     return ucengineuser
 
@@ -156,10 +149,11 @@ def _save_ucengine_user(rootsession, djangouser, created=False, ucengineuser=Non
         rootsession.save(ucengineuser)
     except Exception, err:
         logging.error("error saving UCUser : %s"%err)
+    _add_default_role(ucengineuser.uid, rootsession)
     return ucengineuser
 
 
-@receiver(post_save, sender=DjangoUser, dispatch_uid="django_ucengine.__init__")
+@receiver(post_save, sender=DjangoUser, dispatch_uid=_gen_password())
 def post_save_user(sender, instance, created=None, **kwargs):
     """
     updates User's profile after every save operation
@@ -169,7 +163,7 @@ def post_save_user(sender, instance, created=None, **kwargs):
             .connect(UCUser(UCENGINE['user']), credential=UCENGINE['pwd'])
     ucengineuser = _save_django_user(rootsession, instance, sync=True, created=created)
 
-@receiver(m2m_changed, sender=DjangoUser.groups.through, dispatch_uid="django_ucengine.__init__.post_changed_groups")
+@receiver(m2m_changed, sender=DjangoUser.groups.through, dispatch_uid=_gen_password())
 def post_changed_groups(sender, instance, action, **kwargs):
     """
     Updated UCengine roles depending on Django's groups
@@ -195,7 +189,6 @@ def _delete_ucengine_roles(rootsession, instance, ucengineuser=None):
             rootsession.delete_user_role(uid, groupname, "")
         except Exception, exc:
             logging.error("_delete_ucengine_roles() failed %s"%exc)
-    _add_default_group(instance, uid, rootsession)
     _save_ucengine_user(rootsession, instance, ucengineuser=ucengineuser)
 
 def _add_ucengine_roles(rootsession, instance, ucengineuser=None):
@@ -205,7 +198,6 @@ def _add_ucengine_roles(rootsession, instance, ucengineuser=None):
     if ucengineuser is None:
         ucengineuser = find_user_by_name(rootsession, instance)
     uid=ucengineuser.uid
-    _add_default_group(instance, uid, rootsession)
     for grp in instance.groups.all():
         groupname = "%s"%grp
         try:
@@ -214,7 +206,7 @@ def _add_ucengine_roles(rootsession, instance, ucengineuser=None):
             logging.error("_add_ucengine_roles() failed %s"%exc)
     _save_ucengine_user(rootsession, instance, ucengineuser=ucengineuser)
 
-@receiver(user_logged_in, dispatch_uid="django_ucengine.__init__.update_ucengine_credentials")
+@receiver(user_logged_in, dispatch_uid=_gen_password())
 def update_ucengine_credentials(sender, **kwargs):
     """
     override the user's UCEngine's password
@@ -233,7 +225,7 @@ def update_ucengine_credentials(sender, **kwargs):
         _save_django_user(rootsession, djangouser, sync=True, created=False)
         rootsession.close()
 
-@receiver(user_logged_out, dispatch_uid="django_ucengine.__init__.overwrite_ucengine_credentials")
+@receiver(user_logged_out, dispatch_uid=_gen_password())
 def overwrite_ucengine_credentials(sender, **kwargs):
     """
     override the user's UCEngine's password
